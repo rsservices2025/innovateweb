@@ -2,60 +2,53 @@ import { NextResponse } from "next/server";
 import crypto from "crypto";
 import { sendDeliveryMail } from "@/lib/mailer";
 
-function verifySignature(data: any, received: string) {
+function verifySignature(data: any, receivedSignature: string) {
+  const secret = process.env.INSTAMOJO_SALT!;
   const sorted = Object.keys(data)
-    .filter((k) => k !== "mac")
     .sort()
-    .map((k) => `${k}=${data[k]}`)
+    .map((key) => `${key}=${data[key]}`)
     .join("|");
 
   const generated = crypto
-    .createHmac("sha1", process.env.INSTAMOJO_SALT!)
+    .createHmac("sha1", secret)
     .update(sorted)
     .digest("hex");
 
-  return generated === received;
+  return generated === receivedSignature;
 }
 
 export async function POST(req: Request) {
   try {
-    const formData = await req.formData();
+    const body = await req.formData();
     const data: any = {};
 
-    formData.forEach((value, key) => {
+    body.forEach((value, key) => {
       data[key] = value.toString();
     });
 
-    const isValid = verifySignature(data, data.mac);
+    const receivedSignature = data.mac;
 
-    if (!isValid) {
-      return NextResponse.json({ error: "Invalid signature" }, { status: 403 });
+    if (!verifySignature(data, receivedSignature)) {
+      return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
     }
 
-    // Payment successful
-    if (data.status === "Credit") {
-      const customerEmail = data.buyer;
-      const customerName = data.buyer_name || "Customer";
+    const paymentStatus = data.status;
+    const customerEmail = data.buyer;
+    const customerName = data.buyer_name || "Customer";
 
-      // 1️⃣ Send customer delivery mail
-      await sendDeliveryMail(customerEmail, customerName);
-
-      // 2️⃣ Notify admin via Web3Forms API route
-      await fetch(`${process.env.NEXT_PUBLIC_SITE_URL}/api/admin-notify`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: customerName,
-          email: customerEmail,
-          payment_id: data.payment_id,
-          amount: data.amount,
-        }),
+    if (paymentStatus === "Credit") {
+      await sendDeliveryMail({
+        to: customerEmail,
+        name: customerName,
+        downloadLink: "https://drive.google.com/drive/folders/1p9b2sh-nSwFaxTc5j6AACg-SzHm-5L1Y",
       });
+
+      return NextResponse.json({ success: true });
     }
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: false });
   } catch (err) {
     console.error("Webhook error:", err);
-    return NextResponse.json({ success: false }, { status: 500 });
+    return NextResponse.json({ error: "Webhook failed" }, { status: 500 });
   }
 }
