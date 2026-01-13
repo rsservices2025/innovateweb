@@ -1,40 +1,38 @@
 import { NextResponse } from "next/server";
 import crypto from "crypto";
-import { sendDeliveryMail, sendAdminMail } from "@/lib/mailer";
+import { sendPurchaseEmail, sendAdminLeadMail } from "@/lib/mailer";
+
+function verifySignature(data: any, received: string) {
+  const secret = process.env.INSTAMOJO_SALT!;
+  const sorted = Object.keys(data)
+    .sort()
+    .map((k) => `${k}=${data[k]}`)
+    .join("|");
+
+  const hash = crypto
+    .createHmac("sha1", secret)
+    .update(sorted)
+    .digest("hex");
+
+  return hash === received;
+}
 
 export async function POST(req: Request) {
-  const data = await req.formData();
-  const payload: any = {};
-  data.forEach((value, key) => (payload[key] = value));
+  const data = await req.json();
 
-  const {
-    buyer_name,
-    buyer_email,
-    amount,
-    status,
-  } = payload;
+  const valid = verifySignature(data, data.mac);
 
-  if (status !== "Credit") {
-    return NextResponse.json({ ok: false });
+  if (!valid) {
+    return NextResponse.json({ success: false });
   }
 
-  // 1. Send mail to customer
-  await sendDeliveryMail(buyer_email, buyer_name);
+  if (data.status === "Credit") {
+    const name = data.buyer_name;
+    const email = data.buyer;
 
-  // 2. Send mail to admin
-  await sendAdminMail(buyer_name, buyer_email, amount);
-
-  // 3. Send to Web3Forms
-  await fetch("https://api.web3forms.com/submit", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      access_key: process.env.WEB3FORMS_KEY,
-      name: buyer_name,
-      email: buyer_email,
-      message: `Paid ₹${amount}`,
-    }),
-  });
+    await sendPurchaseEmail(email, name);
+    await sendAdminLeadMail(name, email);
+  }
 
   return NextResponse.json({ success: true });
 }

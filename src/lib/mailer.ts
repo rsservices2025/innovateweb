@@ -3,49 +3,47 @@ import nodemailer from "nodemailer";
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST,
   port: Number(process.env.SMTP_PORT),
-  secure: false,
+  secure: true,
   auth: {
     user: process.env.SMTP_USER,
     pass: process.env.SMTP_PASS,
   },
 });
 
-export async function sendDeliveryMail(email: string, name: string) {
+export async function sendPurchaseEmail(email: string, name: string) {
   const html = `
-    <div style="font-family:Arial;padding:20px;">
-      <img src="https://ik.imagekit.io/vquvxmrff/file_00000000eae861fab80a507c494eb6c3.png" width="120" />
-      <h2>Thank you ${name} ❤️</h2>
-      <p>Your purchase is successful!</p>
-
-      <a href="${process.env.DELIVERY_URL}" 
-         style="display:inline-block;padding:12px 20px;background:#7c3aed;color:#fff;text-decoration:none;border-radius:8px;">
-         Download Now
-      </a>
-
-      <p style="margin-top:20px;">Thank you from <b>InnovateWeb Team</b></p>
-
-      <img src="https://ik.imagekit.io/vquvxmrff/file_0000000055c072078bf5b08f518d6d74.png" width="200" />
-    </div>
+  <div style="font-family:Arial;padding:20px">
+    <img src="https://ik.imagekit.io/vquvxmrff/file_00000000eae861fab80a507c494eb6c3.png" height="60"/>
+    <h2>Thank you for your purchase ❤️</h2>
+    <p>Hi ${name},</p>
+    <p>Your access is ready.</p>
+    <a href="${process.env.DELIVERY_URL}" 
+       style="padding:12px 20px;background:#6d28d9;color:#fff;border-radius:6px;text-decoration:none">
+       Download Now
+    </a>
+    <p style="margin-top:20px">– InnovateWeb Team</p>
+  </div>
   `;
 
   await transporter.sendMail({
     from: `"InnovateWeb" <${process.env.SMTP_USER}>`,
     to: email,
-    subject: "Your Download is Ready 🚀",
+    subject: "Your InnovateWeb Access",
     html,
   });
 }
 
-export async function sendAdminMail(name: string, email: string, amount: string) {
+export async function sendAdminLeadMail(name: string, email: string) {
+  const html = `
+    <h3>New Purchase</h3>
+    <p>Name: ${name}</p>
+    <p>Email: ${email}</p>
+  `;
+
   await transporter.sendMail({
     from: `"InnovateWeb" <${process.env.SMTP_USER}>`,
     to: process.env.ADMIN_EMAIL,
-    subject: "New Order Received",
-    html: `
-      <h3>New Payment Received</h3>
-      <p>Name: ${name}</p>
-      <p>Email: ${email}</p>
-      <p>Amount: ₹${amount}</p>
-    `,
+    subject: "New Sale Received",
+    html,
   });
 }
